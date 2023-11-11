@@ -5,37 +5,39 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import jakarta.annotation.PostConstruct;
-import jakarta.servlet.http.HttpServletRequest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.ObjectPostProcessor;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
@@ -45,30 +47,40 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
-import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.reactive.CorsWebFilter;
+import org.springframework.web.filter.CorsFilter;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JpaUserDetailsService jpaUserDetailsService;
+    @Value("${client_id}")
+    private String clientId;
+    @Value("${client_secret}")
+    private String clientSecret;
+    @Value("${redirect_uri}")
+    private String redirectUri;
+    @Value("${post_logout_uri}")
+    private String postLogoutUri;
+    @Value("${app.url}")
+    private String appUrl;
+    @Value("${backend.url}")
+    private String backendUrl;
+    @PersistenceContext
+    private EntityManager entityManger;
+
 
 
     @Bean
@@ -81,14 +93,6 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
-                // Redirect to the login page when not authenticated from the
-                // authorization endpoint
-//                .exceptionHandling((exceptions) -> exceptions
-//                        .defaultAuthenticationEntryPointFor(
-//                                new LoginUrlAuthenticationEntryPoint("/login"),
-//                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
-//                        )
-//                )
                 // Accept access tokens for User Info and/or Client Registration
                 .oauth2ResourceServer((resourceServer) -> resourceServer
                         .jwt(Customizer.withDefaults()));
@@ -105,75 +109,124 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests((authorize) ->
                         authorize
-//                                .requestMatchers("/login")
-//                                .permitAll()
-//                                .anyRequest()
-//                                .authenticated()
-                                .anyRequest().permitAll()
-
+                                .requestMatchers("/perform_login")
+                                .permitAll()
+                                .anyRequest()
+                                .authenticated()
                 );
 
-
-                // Form login handles the redirect to the login page from the
-                // authorization server filter chain
-//                .userDetailsService()
-//                .authenticationProvider(new DaoAuthenticationProvider())
-
-//                .formLogin(form->
-//                        form
-//                                .loginProcessingUrl("/perform_login")
-//                                .permitAll()
-//                );
 
         return http.build();
     }
 
-
-//    @Bean
-//    public AuthenticationProvider authenticationProvider(){
-//
-//        Authentication authentication = new UsernamePasswordAuthenticationToken("user","password");
-//
-//        return new DaoAuthenticationProvider();
-//    }
-
-    @Bean
-    public InMemoryUserDetailsManager inMemoryUserDetailsManager(){
-
-        UserDetails user = User.builder()
-                .username("user")
-                .password("{noop}password")
-                .roles("USER")
-                .build();
-
-
-        return new InMemoryUserDetailsManager(user);
-    }
-
-
     @Bean
     public AuthenticationManager authenticationManager() {
 
-        DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
-        authenticationProvider.setUserDetailsService(jpaUserDetailsService);
-
-
-        return new ProviderManager(authenticationProvider);
+        return new ProviderManager(authenticationProvider());
     }
+    @Bean
+    public AuthenticationProvider authenticationProvider(){
+        return new AuthenticationProvider() {
+            @Override
+            public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+
+
+                UserDetails userDetails = userDetailsService().loadUserByUsername(authentication.getPrincipal().toString());
+
+
+                if(!passwordEncoder().matches(authentication.getCredentials().toString(), userDetails.getPassword())){
+                    throw new AuthenticationException("Invalid credentials") {};
+                }
+
+
+
+                return new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        authentication.getCredentials(),
+                        userDetails.getAuthorities()
+                );
+            }
+
+            @Override
+            public boolean supports(Class<?> authentication) {
+                return authentication.equals(UsernamePasswordAuthenticationToken.class);
+            }
+        };
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService(){
+        return email -> {
+            Object[] o;
+
+            try{
+                o =  (Object[])entityManger
+                        .createNativeQuery("SELECT email, password, roles FROM accounts WHERE email = :email")
+                        .setParameter("email",email)
+                        .getSingleResult();
+            }
+            catch(NoResultException exception){
+                throw new UsernameNotFoundException("Email Not found");
+            }
+
+
+
+            return new UserDetails() {
+                @Override
+                public Collection<? extends GrantedAuthority> getAuthorities() {
+                    return Arrays.stream(o[2].toString().split(","))
+                            .map(SimpleGrantedAuthority::new)
+                            .toList();
+                }
+
+                @Override
+                public String getPassword() {
+                    return o[1].toString();
+                }
+
+                @Override
+                public String getUsername() {
+                    return o[0].toString();
+                }
+
+                @Override
+                public boolean isAccountNonExpired() {
+                    return true;
+                }
+
+                @Override
+                public boolean isAccountNonLocked() {
+                    return true;
+                }
+
+                @Override
+                public boolean isCredentialsNonExpired() {
+                    return true;
+                }
+
+                @Override
+                public boolean isEnabled() {
+                    return true;
+                }
+            };
+        };
+    }
+
+
     @Bean
     public RegisteredClientRepository registeredClientRepository() {
         RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("oidc-client")
-                .clientSecret("{noop}secret")
+                .clientId(clientId)
+                .clientSecret(passwordEncoder().encode(clientSecret))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:8080/oauth2/code")
-                .postLogoutRedirectUri("http://localhost:5173/")
+                .redirectUri(redirectUri)
+                .postLogoutRedirectUri(postLogoutUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
-                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofDays(1)).build())
-//                .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofSeconds(15)).build())
+                .tokenSettings(TokenSettings.builder().refreshTokenTimeToLive(Duration.ofDays(30)).build())
                 .build();
 
         return new InMemoryRegisteredClientRepository(oidcClient);
@@ -215,21 +268,16 @@ public class SecurityConfig {
         return AuthorizationServerSettings.builder().build();
     }
 
-//    @Bean
-//    public PasswordEncoder passwordEncoder(){
-//        PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-//
-//        System.out.println("password: "+passwordEncoder.encode("password"));
-//        System.out.println("secret: "+passwordEncoder.encode("secret"));
-//
-//        return passwordEncoder;
-//    }
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(Arrays.asList("*"));
+        configuration.setAllowedOrigins(List.of(backendUrl));
+        configuration.setAllowedMethods(List.of("*"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
 
@@ -237,5 +285,25 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
+
+//    @Bean
+//    public FilterRegistrationBean corsFilterRegistrationBean(){
+//
+//        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+//        CorsConfiguration config = new CorsConfiguration();
+//        config.applyPermitDefaultValues();
+//        config.setAllowCredentials(true);
+//        config.setAllowedOrigins(List.of(appUrl, backendUrl));
+//        config.setAllowedHeaders(List.of("*"));
+//        config.setAllowedMethods(List.of("*"));
+//        config.setExposedHeaders(List.of("*"));
+//        config.setMaxAge(3600L);
+//        source.registerCorsConfiguration("/**", config);
+//
+//        FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));
+//        bean.setOrder(0);
+//        return bean;
+//
+//    }
 
 }
