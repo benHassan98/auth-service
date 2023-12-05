@@ -74,8 +74,6 @@ public class SecurityConfig {
     private String redirectUri;
     @Value("${post_logout_uri}")
     private String postLogoutUri;
-    @Value("${app.url}")
-    private String appUrl;
     @Value("${backend.url}")
     private String backendUrl;
     @PersistenceContext
@@ -121,7 +119,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager() {
-
+        System.out.println("password: "+passwordEncoder().encode("password"));
         return new ProviderManager(authenticationProvider());
     }
     @Bean
