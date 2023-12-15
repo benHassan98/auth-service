@@ -120,7 +120,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager() {
-        System.out.println("password: "+passwordEncoder().encode("password"));
+
         return new ProviderManager(authenticationProvider());
     }
     @Bean

@@ -47,27 +47,19 @@ import static org.springframework.security.web.context.HttpSessionSecurityContex
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
-    private final RabbitAdmin rabbitAdmin;
 
     @Autowired
-    public AuthController(AuthenticationManager authenticationManager, RabbitAdmin rabbitAdmin) {
+    public AuthController(AuthenticationManager authenticationManager) {
         this.authenticationManager = authenticationManager;
-        this.rabbitAdmin = rabbitAdmin;
     }
     @PostMapping("/perform_login")
     public ResponseEntity<?> login(@RequestBody LoginRecord loginRecord, HttpServletRequest request) throws AuthenticationException{
-
-
-        System.out.println(loginRecord.email());
-        System.out.println(loginRecord.password());
 
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginRecord.email(), loginRecord.password()
                 )
         );
-
-        System.out.println(authentication.isAuthenticated());
 
         SecurityContext sc = SecurityContextHolder.getContext();
         sc.setAuthentication(authentication);
@@ -92,11 +84,6 @@ public class AuthController {
     public ResponseEntity<?> logout(){
 
         CustomUserDetails userDetails =  (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-
-        System.out.println(userDetails.getId());
-        System.out.println(userDetails.getUsername());
-        System.out.println(userDetails.getPassword());
-
 
 
         Optional.of(RequestContextHolder.currentRequestAttributes())
