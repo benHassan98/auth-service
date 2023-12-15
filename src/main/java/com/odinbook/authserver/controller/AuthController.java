@@ -1,14 +1,22 @@
 package com.odinbook.authserver.controller;
 
+
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.util.JSONObjectUtils;
 import com.odinbook.authserver.record.LoginRecord;
+import com.odinbook.authserver.userDetails.CustomUserDetails;
+import com.rabbitmq.http.client.Client;
+import com.rabbitmq.http.client.ClientParameters;
+import com.rabbitmq.http.client.domain.BindingInfo;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.apache.tomcat.util.json.JSONParser;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
@@ -23,8 +31,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
 import java.util.TreeMap;
 
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
@@ -33,10 +47,12 @@ import static org.springframework.security.web.context.HttpSessionSecurityContex
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
+    private final RabbitAdmin rabbitAdmin;
 
     @Autowired
-    public AuthController(AuthenticationManager authenticationManager) {
+    public AuthController(AuthenticationManager authenticationManager, RabbitAdmin rabbitAdmin) {
         this.authenticationManager = authenticationManager;
+        this.rabbitAdmin = rabbitAdmin;
     }
     @PostMapping("/perform_login")
     public ResponseEntity<?> login(@RequestBody LoginRecord loginRecord, HttpServletRequest request) throws AuthenticationException{
@@ -75,7 +91,23 @@ public class AuthController {
     @GetMapping("/perform_logout")
     public ResponseEntity<?> logout(){
 
+        CustomUserDetails userDetails =  (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        System.out.println(userDetails.getId());
+        System.out.println(userDetails.getUsername());
+        System.out.println(userDetails.getPassword());
+
+
+
+        Optional.of(RequestContextHolder.currentRequestAttributes())
+                .map(ServletRequestAttributes.class::cast)
+                .map(ServletRequestAttributes::getRequest)
+                .map(HttpServletRequest::getSession)
+                .ifPresent(HttpSession::invalidate);
+
         SecurityContextHolder.clearContext();
+
+
 
         return ResponseEntity.ok().build();
     }

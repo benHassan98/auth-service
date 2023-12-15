@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.odinbook.authserver.userDetails.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
@@ -155,11 +156,11 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService(){
         return email -> {
-            Object[] o;
+            Object[] objects;
 
             try{
-                o =  (Object[])entityManger
-                        .createNativeQuery("SELECT email, password, roles FROM accounts WHERE email = :email")
+                objects =  (Object[])entityManger
+                        .createNativeQuery("SELECT id, email, password, roles FROM accounts WHERE email = :email")
                         .setParameter("email",email)
                         .getSingleResult();
             }
@@ -167,46 +168,8 @@ public class SecurityConfig {
                 throw new UsernameNotFoundException("Email Not found");
             }
 
+            return new CustomUserDetails(objects);
 
-
-            return new UserDetails() {
-                @Override
-                public Collection<? extends GrantedAuthority> getAuthorities() {
-                    return Arrays.stream(o[2].toString().split(","))
-                            .map(SimpleGrantedAuthority::new)
-                            .toList();
-                }
-
-                @Override
-                public String getPassword() {
-                    return o[1].toString();
-                }
-
-                @Override
-                public String getUsername() {
-                    return o[0].toString();
-                }
-
-                @Override
-                public boolean isAccountNonExpired() {
-                    return true;
-                }
-
-                @Override
-                public boolean isAccountNonLocked() {
-                    return true;
-                }
-
-                @Override
-                public boolean isCredentialsNonExpired() {
-                    return true;
-                }
-
-                @Override
-                public boolean isEnabled() {
-                    return true;
-                }
-            };
         };
     }
 
@@ -284,24 +247,5 @@ public class SecurityConfig {
         return source;
     }
 
-//    @Bean
-//    public FilterRegistrationBean corsFilterRegistrationBean(){
-//
-//        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-//        CorsConfiguration config = new CorsConfiguration();
-//        config.applyPermitDefaultValues();
-//        config.setAllowCredentials(true);
-//        config.setAllowedOrigins(List.of(appUrl, backendUrl));
-//        config.setAllowedHeaders(List.of("*"));
-//        config.setAllowedMethods(List.of("*"));
-//        config.setExposedHeaders(List.of("*"));
-//        config.setMaxAge(3600L);
-//        source.registerCorsConfiguration("/**", config);
-//
-//        FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));
-//        bean.setOrder(0);
-//        return bean;
-//
-//    }
 
 }
