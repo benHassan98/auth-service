@@ -73,9 +73,6 @@ public class AuthController {
     @GetMapping("/getEmail")
     public String getEmail(){
 
-        System.out.println(SecurityContextHolder.getContext().getAuthentication().getName());
-
-
         return SecurityContextHolder.getContext().getAuthentication().getName();
     }
 
