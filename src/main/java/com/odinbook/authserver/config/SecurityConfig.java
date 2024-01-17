@@ -108,7 +108,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests((authorize) ->
                         authorize
-                                .requestMatchers("/perform_login")
+                                .requestMatchers("/perform_login","/actuator/**")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated()
